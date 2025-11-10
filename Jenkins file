@@ -1,0 +1,38 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_USER = credentials('dockerhub-credentials')
+        IMAGE_NAME = "demo-app"
+        IMAGE_TAG = "latest"
+        KUBE_CONFIG = "/etc/rancher/k3s/k3s.yaml"
+    }
+
+    stages {
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $DOCKER_USER_USR/$IMAGE_NAME:$IMAGE_TAG .'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                sh '''
+                echo $DOCKER_USER_PSW | docker login -u $DOCKER_USER_USR --password-stdin
+                docker push $DOCKER_USER_USR/$IMAGE_NAME:$IMAGE_TAG
+                '''
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh '''
+                export KUBECONFIG=$KUBE_CONFIG
+                kubectl set image deployment/demo-app demo-app=$DOCKER_USER_USR/$IMAGE_NAME:$IMAGE_TAG --record || \
+                kubectl apply -f k8s/
+                kubectl rollout status deployment/demo-app
+                '''
+            }
+        }
+    }
+}
